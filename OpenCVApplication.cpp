@@ -390,8 +390,6 @@ void MyCallBackFunc(int event, int x, int y, int flags, void* param) {
 bool isInside(const Mat& src, int i, int j) {
 	return (i >= 0 && i < src.rows&& j >= 0 && j < src.cols);
 }
-
-
 void testMouseClick()
 {
 	Mat src;
@@ -413,84 +411,6 @@ void testMouseClick()
 		waitKey(0);
 	}
 }
-
-void fillHoles(Mat& mask) {
-	Mat temp;
-	mask.copyTo(temp);
-	floodFill(temp, Point(0, 0), Scalar(255));
-	bitwise_not(temp, temp);
-	mask = (mask | temp);
-}
-/*
-void project() {
-	char fname[MAX_PATH];
-	while (openFileDlg(fname)) {
-		Mat img = imread(fname, IMREAD_COLOR);
-		imshow("img", img);
-		if (img.empty()) {
-			cout << "Image not found: " << fname << endl;
-			continue;
-		}
-
-		namedWindow("Select Region of Interest");
-		MouseParams mp;
-		mp.src = &img;
-		setMouseCallback("Select Region of Interest", MyCallBackFunc, &mp);
-
-		while (true) {
-			Mat temp_image = img.clone();
-			if (mp.drawing_box) {
-				rectangle(temp_image, mp.box, Scalar(0, 255, 255));
-			}
-			imshow("Select Region of Interest", temp_image);
-			if (waitKey(10) == 27) break; // Esc stops the loop
-			if (!mp.drawing_box && mp.box.width > 0 && mp.box.height > 0) {
-				break;
-			}
-		}
-		destroyWindow("Select Region of Interest");
-
-		if (mp.box.width > 0 && mp.box.height > 0) {
-			Mat croppedImage = img(mp.box);
-			Mat gray;
-			cvtColor(croppedImage, gray, COLOR_BGR2GRAY);
-			CascadeClassifier eye_cascade;
-			eye_cascade.load("D:/CTI/an3/sem2/PI/red-eye-detection/OpenCVApplication-VS2017_OCV340_basic/OpenCV/include/opencv2/data/haarcascade_eye.xml");
-
-			vector<Rect> eyes;
-			eye_cascade.detectMultiScale(croppedImage, eyes, 1.1, 5, 0 | CASCADE_SCALE_IMAGE, Size(30, 30));
-			for (Rect eye : eyes) {
-				rectangle(croppedImage, eye, Scalar(0, 255, 0), 2);
-			}
-			imshow("Cropped Image with Green Eyes", croppedImage);
-			//imshow("Image", img);
-			for (Rect eye : eyes) {
-				Mat eyeRegion = croppedImage(eye);
-				vector<Mat> bgr(3);
-				
-				split(eyeRegion, bgr);
-				Mat mask = (bgr[2] > 150) & (bgr[2] > (bgr[1] + bgr[0]));
-				fillHoles(mask);
-				dilate(mask, mask, Mat(), Point(-1, -1), 3, 1, 1);
-
-				Mat mean = (bgr[0] + bgr[1]) / 2;
-				mean.copyTo(bgr[0], mask);
-				mean.copyTo(bgr[1], mask);
-				mean.copyTo(bgr[2], mask);
-
-				Mat eyeOut;
-				merge(bgr, eyeOut);
-				eyeOut.copyTo(croppedImage(eye));
-			}
-
-			imshow("Cropped Image with Green Eyes", croppedImage);
-			waitKey(0);
-		}
-
-	}
-}
-*/
-
 
 
 Mat dilatare(const Mat& src, int iteration) {
@@ -520,15 +440,49 @@ Mat dilatare(const Mat& src, int iteration) {
 			}
 		}
 
-		dilatare = temp;  // Update the dilated image for the next iteration
+		dilatare = temp; 
 	}
 	return dilatare;
 }
 
-double calculateCircularity(const vector<Point>& contour) {
-	double perimeter = arcLength(contour, true);
-	double area = contourArea(contour);
-	return 4 * CV_PI * (area / (perimeter * perimeter));
+//cat de rotund e 
+double calcCircularitate(Mat_<uchar> img) {
+	int arie = 0;
+	for (int r = 0; r < img.rows; r++)
+	{
+		for (int c = 0; c < img.cols; c++) {
+			if (img(r, c) == 0) {
+				arie += 1;
+			}
+
+		}
+	}
+	int perimetru = 0;
+	for (int r = 0; r < img.rows; r++) {
+		for (int c = 0; c < img.cols; c++) {
+			if (img(r, c) == 0) {
+				if ((r > 0 && img(r - 1, c) != 0) || (c > 0 && img(r, c - 1) != 0) || (c < img.cols - 1 && img(r, c + 1) != 0) || (r < img.rows - 1 && img(r + 1, c) != 0) ||
+					(r > 0 && c > 0 && img(r - 1, c - 1) != 0) || (r < img.rows - 1 && c < img.cols - 1 && img(r + 1, c + 1) != 0) || (r > 0 && c < img.cols - 1 && img(r - 1, c + 1) != 0) ||
+					(r < img.rows - 1 && c > 0 && img(r + 1, c - 1) != 0)) {
+					perimetru++;
+				}
+			}
+		}
+	}
+	float subtiere = 4 * ((float)arie / (perimetru*perimetru)) * PI;
+	printf("factprul de subtiere: %f\n", subtiere);
+	return subtiere;
+}
+
+//  distanta dintre 2 ochi
+bool areEyes(const Rect& r1, const Rect& r2) {
+	int dx = abs(r1.x - r2.x);
+	int dy = abs(r1.y - r2.y);
+	double distance = sqrt(dx * dx + dy * dy);
+	printf("%d %d %f  ", dx, dy, distance);
+	printf("%d %d %d\n", r1.height , r1.width * 4, r1.width * 20);
+	//        axa y                   x min                          x max
+	return (dy < r1.height ) && (distance > r1.width * 3) && (distance < r1.width * 20);
 }
 
 void project() {
@@ -559,6 +513,7 @@ void project() {
 		destroyWindow("Select Region of Interest");
 		Mat croppedImage = img(mp.box);
 		Mat mask = Mat::zeros(croppedImage.size(), CV_8UC1);
+		//Mat mask1 = Mat::zeros(croppedImage.size(), CV_8UC1);
 		for (int i = 0; i < croppedImage.rows; i++) {
 			for (int j = 0; j < croppedImage.cols; j++) {
 				Vec3b pixel = croppedImage.at<Vec3b>(i, j);
@@ -568,105 +523,93 @@ void project() {
 			}
 		}
 		imshow("masca", mask);
-		//fillHoles(mask);
-		//imshow("masca1", mask);
-		//dilate(mask, mask, Mat(), Point(-1, -1), 3, 1, 1);
-		imshow("masca1", mask);
-		//mask = dilataree_8(mask);
-		mask = dilatare(mask, 3);
-
+		mask = dilatare(mask, 2);
 		imshow("masca_dilatare", mask);
-		
-		for (int i = 0; i < croppedImage.rows; i++) {
-			for (int j = 0; j < croppedImage.cols; j++) {
-				if (mask.at<uchar>(i, j) == 255) {
-					Vec3b& pixel = croppedImage.at<Vec3b>(i, j);
-					pixel[2] = pixel[0] = pixel[1] = (pixel[0] + pixel[1]) / 2; // Set blue and green channels to mean
+		// bfs conturul fiecarei forme
+		vector<vector<Point>> contur;
+		Mat visited = Mat::zeros(mask.size(), CV_8UC1);
+
+		for (int i = 0; i < mask.rows; i++) {
+			for (int j = 0; j < mask.cols; j++) {
+				if (mask.at<uchar>(i, j) == 255 && visited.at<uchar>(i, j) == 0) {
+					vector<Point> contour;
+					Point start = Point(j, i);
+					contour.push_back(start);
+					visited.at<uchar>(i, j) = 1;
+					for (size_t k = 0; k < contour.size(); k++) {
+						Point pt = contour[k];
+						for (int ki = -1; ki <= 1; ki++) {
+							for (int kj = -1; kj <= 1; kj++) {
+								Point neighbor = pt + Point(kj, ki);
+								if (isInside(mask, neighbor.y, neighbor.x) && mask.at<uchar>(neighbor.y, neighbor.x) == 255 && visited.at<uchar>(neighbor.y, neighbor.x) == 0) {
+									contour.push_back(neighbor);
+									visited.at<uchar>(neighbor.y, neighbor.x) = 1;
+								}
+							}
+						}
+					}
+					contur.push_back(contour);
 				}
 			}
 		}
-		
-		//imshow("img1", croppedImage);
-		
+		vector<pair<double, Rect>> circle_reg={};
+		for (int i = 0; i < contur.size(); i++) {
+			//boundingRect returns a rectangle that fits around the contour
+			Rect bounding_box = boundingRect(contur[i]);
+			Mat_<uchar> regiune_de_interes = mask(bounding_box);
+			double circularity = calcCircularitate(regiune_de_interes);
+			if (circularity > 0.2&& circularity<(double)1.3) {
+				// cat de de rotund, regiunea/eye
+				circle_reg.push_back({ circularity, bounding_box });
+			}
+		}
+		// pentru sortare sa sorteze in functie de cat de rotund e
+		auto comparator = [](const pair<double, Rect>& a, const pair<double, Rect>& b) {
+			return a.first > b.first;
+		};
+		std::sort(circle_reg.begin(), circle_reg.end(), comparator);
+
+		vector<Rect> potentialEyes;
+		for (size_t i = 0; i < circle_reg.size(); i++) {
+			Rect eye = circle_reg[i].second;
+			potentialEyes.push_back(eye);
+		}
+		int finish = 0;
+		for (size_t i = 0; i < potentialEyes.size(); i++) {
+			for (size_t j = i + 1; j < potentialEyes.size(); j++) {
+				if (finish == 1)
+					break;
+				if (areEyes(potentialEyes[i], potentialEyes[j])) {
+					finish = 1;
+					//rectangle(croppedImage, potentialEyes[i], Scalar(0, 255, 0), 2);
+					//rectangle(croppedImage, potentialEyes[j], Scalar(0, 255, 0), 2);
+					Rect eye1 = potentialEyes[i];
+					for (int y = eye1.y; y < eye1.y + eye1.height; y++) {
+						for (int x = eye1.x; x < eye1.x + eye1.width; x++) {
+							if (mask.at<uchar>(y, x) == 255) {
+								Vec3b& pixel = croppedImage.at<Vec3b>(y, x);
+								pixel[2] = (pixel[0] + pixel[1]) / 2;
+							}
+						}
+					}
+					Rect eye2 = potentialEyes[j];
+					for (int y = eye2.y; y < eye2.y + eye2.height; y++) {
+						for (int x = eye2.x; x < eye2.x + eye2.width; x++) {
+							if (mask.at<uchar>(y, x) == 255) {
+								Vec3b& pixel = croppedImage.at<Vec3b>(y, x);
+								pixel[2] = (pixel[0] + pixel[1]) / 2;
+							}
+						}
+					}
+				}
+			}
+			if (finish == 1)
+				break;
+		}
 		imshow("Red Eye Detection", img);
 		waitKey(0);
 	}
 }
-void project1() {
-	char fname[MAX_PATH];
-	while (openFileDlg(fname)) {
-		Mat img = imread(fname, IMREAD_COLOR);
-		Mat imgOut= img.clone();
-		if (img.empty()) {
-			cout << "Image not found: " << fname << endl;
-			continue;
-		}
-		//imshow("img", img);
-		namedWindow("Select Region of Interest");
-		MouseParams mp;
-		mp.src = &img;
-		setMouseCallback("Select Region of Interest", MyCallBackFunc, &mp);
-
-		while (true) {
-			Mat temp_image = img.clone();
-			if (mp.drawing_box) {
-				rectangle(temp_image, mp.box, Scalar(0, 255, 255));
-			}
-			imshow("Select Region of Interest", temp_image);
-			if (waitKey(10) == 27) break; // Esc stops the loop
-			if (!mp.drawing_box && mp.box.width > 0 && mp.box.height > 0) {
-				break;
-			}
-		}
-		destroyWindow("Select Region of Interest");
-
-		if (mp.box.width > 0 && mp.box.height > 0) {
-			Mat croppedImage = img(mp.box);
-			Mat gray;
-			cvtColor(croppedImage, gray, COLOR_BGR2GRAY);
-			CascadeClassifier eye_cascade;
-			eye_cascade.load("D:/CTI/an3/sem2/PI/red-eye-detection/OpenCVApplication-VS2017_OCV340_basic/OpenCV/include/opencv2/data/haarcascade_eye.xml");
-
-			vector<Rect> eyes;
-			eye_cascade.detectMultiScale(gray, eyes, 1.1, 5, 0 | CASCADE_SCALE_IMAGE, Size(30, 30));
-			for (Rect eye : eyes) {
-				rectangle(croppedImage, eye, Scalar(0, 255, 0), 2);
-			}
-			for (Rect& eye : eyes) {
-				Mat eyeRegion = croppedImage(eye);
-				Mat mask = Mat::zeros(eye.height, eye.width, CV_8U);
-				for (int i = 0; i < eye.height; i++) {
-					for (int j = 0; j < eye.width; j++) {
-						Vec3b pixel = eyeRegion.at<Vec3b>(i, j);
-						if (pixel[2] > 150 && pixel[2] > (pixel[1] + pixel[0])) {
-							mask.at<uchar>(i, j) = 255;
-						}
-					}
-				}
-				imshow("masca", mask);
-				fillHoles(mask);
-				imshow("masca1", mask);
-				dilate(mask, mask, Mat(), Point(-1, -1), 3, 1, 1);
-				imshow("masca2", mask);
-				for (int i = 0; i < eye.height; i++) {
-					for (int j = 0; j < eye.width; j++) {
-						if (mask.at<uchar>(i, j) == 255) {
-							Vec3b& pixel = eyeRegion.at<Vec3b>(i, j);
-							pixel[2]=pixel[0] = pixel[1] = (pixel[0] + pixel[1]) / 2; // Set blue and green channels to mean
-						}
-					}
-				}
-				eyeRegion.copyTo(croppedImage(eye));
-			}
-			croppedImage.copyTo(imgOut(mp.box));
-
-			imshow("Cropped Image with Green Eyes", croppedImage);
-			//imshow("Output Image", imgOut); 
-			waitKey(0);
-		}
-	}
-}
-
 
 
 int main()
